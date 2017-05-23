@@ -1,9 +1,9 @@
 package io.socket.nativeclient;
 
+import java.io.BufferedInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 
 /**
  * @作者 mitkey
@@ -18,20 +18,31 @@ public final class StreamUtils {
 	}
 
 	public static byte[] copyToByteArray(InputStream in) throws IOException {
-		ByteArrayOutputStream out = new ByteArrayOutputStream(DEFAULT_BUFFER_SIZE);
-		copy(in, out);
-		return out.toByteArray();
+		if (!(in instanceof BufferedInputStream)) {
+			in = new BufferedInputStream(in);
+		}
+		try (ByteArrayOutputStream baos = new ByteArrayOutputStream(Math.max(32, in.available()))) {
+			byte[] buffer = new byte[DEFAULT_BUFFER_SIZE];
+			int bytesRead;
+			while ((bytesRead = in.read(buffer)) != -1) {
+				baos.write(buffer, 0, bytesRead);
+			}
+			return baos.toByteArray();
+		}
 	}
 
-	public static int copy(InputStream in, OutputStream out) throws IOException {
-		int byteCount = 0;
-		byte buffer[] = new byte[4096];
-		for (int bytesRead = -1; (bytesRead = in.read(buffer)) != -1;) {
-			out.write(buffer, 0, bytesRead);
-			byteCount += bytesRead;
+	/** A ByteArrayOutputStream which avoids copying of the byte array if possible. */
+	static public class OptimizedByteArrayOutputStream extends ByteArrayOutputStream {
+		public OptimizedByteArrayOutputStream(int initialSize) {
+			super(initialSize);
 		}
-		out.flush();
-		return byteCount;
+
+		@Override
+		public synchronized byte[] toByteArray() {
+			if (count == buf.length)
+				return buf;
+			return super.toByteArray();
+		}
 	}
 
 }
