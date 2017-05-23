@@ -34,7 +34,6 @@ public class SocketClient {
 
 	private Socket socket;
 	private BufferedOutputStream bos;
-	private BufferedInputStream bis;
 
 	SocketClient(String host, int port, Options opts, OnSocketCall onCall) {
 		System.out.println(String.format("start connect to host[%s] port[%s] .....", host, port));
@@ -57,9 +56,6 @@ public class SocketClient {
 
 			// 连接协议处理
 			connectTransport(new InetSocketAddress(host, port), opts);
-
-			bos = new BufferedOutputStream(socket.getOutputStream());
-			bis = new BufferedInputStream(socket.getInputStream());
 		} catch (Exception e) {
 			transportError(e);
 		}
@@ -82,6 +78,9 @@ public class SocketClient {
 			@Override
 			public void run() {
 				try {
+					if (bos == null) {
+						bos = new BufferedOutputStream(socket.getOutputStream());
+					}
 					bos.write(data);
 					bos.flush();
 				} catch (IOException e) {
@@ -161,6 +160,8 @@ public class SocketClient {
 	}
 
 	private class ReplyPollThread extends Thread {
+		private BufferedInputStream bis;
+
 		public ReplyPollThread() {
 			super("Reply Poll Thread.");
 		}
@@ -170,6 +171,10 @@ public class SocketClient {
 			super.run();
 			while (isConnected()) {
 				try {
+					if (bis == null) {
+						bis = new BufferedInputStream(socket.getInputStream());
+					}
+
 					blocked = true;
 					byte[] bs = StreamUtils.copyToByteArray(bis);
 					if (bs != null && bs.length != 0) {
