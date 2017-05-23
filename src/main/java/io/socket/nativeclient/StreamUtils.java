@@ -11,8 +11,11 @@ import java.io.OutputStream;
  * @类说明 StreamUtils.java <br/>
  * @版本 0.0.1
  */
-final class StreamUtils {
+public final class StreamUtils {
 	private static final int DEFAULT_BUFFER_SIZE = 4096;
+
+	private StreamUtils() {
+	}
 
 	public static byte[] copyToByteArray(InputStream in) throws IOException {
 		ByteArrayOutputStream out = new ByteArrayOutputStream(DEFAULT_BUFFER_SIZE);
