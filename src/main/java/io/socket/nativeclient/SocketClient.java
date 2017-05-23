@@ -145,22 +145,6 @@ public class SocketClient {
 		}
 
 		// 断开 socket
-		if (bos != null) {
-			try {
-				bos.close();
-				bos = null;
-			} catch (IOException e) {
-				transportError(e);
-			}
-		}
-		if (bis != null) {
-			try {
-				bis.close();
-				bis = null;
-			} catch (IOException e) {
-				transportError(e);
-			}
-		}
 		if (socket != null) {
 			try {
 				socket.close();
@@ -197,10 +181,6 @@ public class SocketClient {
 						transportError(e);
 						return;
 					}
-				}
-				try {
-					sleep(50);
-				} catch (InterruptedException e) {
 				}
 			}
 			transportDisconnected();
