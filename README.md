@@ -3,3 +3,7 @@
 
 # native-socket.io-client-java
 Socket implementation using java.net.Socket
+
+
+
+The project is immature.I use it only for testing servers
