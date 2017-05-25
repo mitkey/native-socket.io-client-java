@@ -176,16 +176,22 @@ public class SocketClient {
 					}
 
 					blocked = true;
-					byte[] bs = StreamUtils.copyToByteArray(bis);
-					if (bs != null && bs.length != 0) {
-						transportData(bs);
+
+					// ”一次性“从输入流中读完
+					int available = bis.available();
+					if (available != 0) {
+						byte[] buffer = new byte[available];
+						int bytesRead = bis.read(buffer);
+						// 不能使用 != -1 来判断是否读到完，因为 socket 的输入流只有 socket 断开时才会返回 -1
+						if (bytesRead > 0) {
+							transportData(buffer);
+						}
 					}
+
 					blocked = false;
 				} catch (IOException e) {
-					if (!interrupted()) {
-						transportError(e);
-						return;
-					}
+					transportError(e);
+					return;
 				}
 			}
 			transportDisconnected();
