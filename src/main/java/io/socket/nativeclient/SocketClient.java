@@ -23,7 +23,6 @@ public class SocketClient {
 	private ExecutorService executorService = Executors.newCachedThreadPool();
 	private Timer timer = new Timer();
 
-	private ReplyPollThread pollThread;
 	/** ReplyPollThread 是否堵塞 */
 	private boolean blocked;
 
@@ -107,10 +106,41 @@ public class SocketClient {
 			public void run() {
 				try {
 					socket.sendUrgentData(0xff);
-					if (!connected && pollThread == null) {
+					if (!connected) {
 						// 开启服务器消息回复线程处理
-						pollThread = new ReplyPollThread();
-						pollThread.start();
+						executorService.execute(new Runnable() {
+							private BufferedInputStream bis;
+
+							@Override
+							public void run() {
+								while (isConnected()) {
+									try {
+										if (bis == null) {
+											bis = new BufferedInputStream(socket.getInputStream());
+										}
+
+										blocked = true;
+
+										// ”一次性“从输入流中读完
+										int available = bis.available();
+										if (available != 0) {
+											byte[] buffer = new byte[available];
+											int bytesRead = bis.read(buffer);
+											// 不能使用 != -1 来判断是否读到完，因为 socket 的输入流只有 socket 断开时才会返回 -1
+											if (bytesRead > 0) {
+												transportData(buffer);
+											}
+										}
+
+										blocked = false;
+									} catch (IOException e) {
+										transportError(e);
+										return;
+									}
+								}
+								transportDisconnected();
+							}
+						});
 					}
 					connected = true;
 				} catch (IOException e) {
@@ -126,22 +156,17 @@ public class SocketClient {
 	}
 
 	private void transportDisconnected() {
-		// 角标更新为 false
-		connected = false;
-
 		// 关闭任务执行器
 		executorService.shutdownNow();
-
-		// 通知回调
-		onCall.onDisconnect();
 
 		// 取消计时器
 		timer.cancel();
 
-		// 终止轮询线程
-		if (pollThread != null) {
-			pollThread.interrupt();
-		}
+		// 角标更新为 false
+		connected = false;
+
+		// 通知回调
+		onCall.onDisconnect();
 
 		// 断开 socket
 		if (socket != null) {
@@ -157,45 +182,6 @@ public class SocketClient {
 	private void transportError(Exception error) {
 		onCall.onError(new SocketIOException(error));
 		transportDisconnected();
-	}
-
-	private class ReplyPollThread extends Thread {
-		private BufferedInputStream bis;
-
-		public ReplyPollThread() {
-			super("Reply Poll Thread.");
-		}
-
-		@Override
-		public void run() {
-			super.run();
-			while (isConnected()) {
-				try {
-					if (bis == null) {
-						bis = new BufferedInputStream(socket.getInputStream());
-					}
-
-					blocked = true;
-
-					// ”一次性“从输入流中读完
-					int available = bis.available();
-					if (available != 0) {
-						byte[] buffer = new byte[available];
-						int bytesRead = bis.read(buffer);
-						// 不能使用 != -1 来判断是否读到完，因为 socket 的输入流只有 socket 断开时才会返回 -1
-						if (bytesRead > 0) {
-							transportData(buffer);
-						}
-					}
-
-					blocked = false;
-				} catch (IOException e) {
-					transportError(e);
-					return;
-				}
-			}
-			transportDisconnected();
-		}
 	}
 
 }
