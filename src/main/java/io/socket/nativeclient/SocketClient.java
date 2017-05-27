@@ -72,7 +72,7 @@ public class SocketClient {
 		return connected;
 	}
 
-	public void sendData(byte[] data) {
+	public void sendData(final byte[] data) {
 		executorService.submit(new Runnable() {
 			@Override
 			public void run() {
