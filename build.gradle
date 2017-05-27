@@ -12,6 +12,7 @@ apply plugin: 'java'
 
 version = 0.2
 sourceCompatibility = 1.7
+[compileJava, compileTestJava]*.options*.encoding = 'UTF-8'
 
 allprojects {
 	repositories {
