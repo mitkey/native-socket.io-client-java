@@ -118,7 +118,7 @@ public class SocketClient {
 					transportDisconnected();
 				}
 			}
-		}, 0, 50, TimeUnit.SECONDS);
+		}, 0, 1, TimeUnit.SECONDS);
 	}
 
 	private void openTaskReceiveData() {
