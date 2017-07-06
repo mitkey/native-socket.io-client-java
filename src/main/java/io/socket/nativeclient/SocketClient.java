@@ -5,10 +5,9 @@ import java.io.BufferedOutputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
-import java.util.Timer;
-import java.util.TimerTask;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 import io.socket.nativeclient.IO.Options;
 
@@ -20,8 +19,7 @@ import io.socket.nativeclient.IO.Options;
  */
 public class SocketClient {
 
-	private ExecutorService executorService = Executors.newCachedThreadPool();
-	private Timer timer = new Timer();
+	private ScheduledExecutorService scheduledExecutorService = Executors.newScheduledThreadPool(Runtime.getRuntime().availableProcessors());
 
 	/** ReplyPollThread 是否堵塞 */
 	private boolean blocked;
@@ -73,7 +71,7 @@ public class SocketClient {
 	}
 
 	public void sendData(final byte[] data) {
-		executorService.submit(new Runnable() {
+		scheduledExecutorService.submit(new Runnable() {
 			@Override
 			public void run() {
 				try {
@@ -97,58 +95,68 @@ public class SocketClient {
 		// 在建立连接或者发生错误之前，连接一直处于阻塞状态。
 		socket.connect(socketAddress, opts.connectTimeout);
 
-		// 通知回调
+		// 通知连接成功回调
 		onCall.onConnect();
 
+		// 角标更新为 true
+		connected = true;
+
+		// 开启任务线程处理接收服务器消息
+		openTaskReceiveData();
+
 		// 开启定时任务用于检测 socket 是否已断开
-		timer.schedule(new TimerTask() {
+		openTaskCheckStatus();
+	}
+
+	private void openTaskCheckStatus() {
+		scheduledExecutorService.scheduleWithFixedDelay(new Runnable() {
 			@Override
 			public void run() {
 				try {
 					socket.sendUrgentData(0xff);
-					if (!connected) {
-						// 开启服务器消息回复线程处理
-						executorService.execute(new Runnable() {
-							private BufferedInputStream bis;
-
-							@Override
-							public void run() {
-								while (isConnected()) {
-									try {
-										if (bis == null) {
-											bis = new BufferedInputStream(socket.getInputStream());
-										}
-
-										blocked = true;
-
-										// ”一次性“从输入流中读完
-										int available = bis.available();
-										if (available != 0) {
-											byte[] buffer = new byte[available];
-											int bytesRead = bis.read(buffer);
-											// 不能使用 != -1 来判断是否读到完，因为 socket 的输入流只有 socket 断开时才会返回 -1
-											if (bytesRead > 0) {
-												transportData(buffer);
-											}
-										}
-
-										blocked = false;
-									} catch (IOException e) {
-										transportError(e);
-										return;
-									}
-								}
-								transportDisconnected();
-							}
-						});
-					}
-					connected = true;
 				} catch (IOException e) {
-					cancel();
 					transportDisconnected();
 				}
 			}
-		}, 0, 1000);
+		}, 0, 50, TimeUnit.SECONDS);
+	}
+
+	private void openTaskReceiveData() {
+		if (!isConnected()) {
+			return;
+		}
+
+		scheduledExecutorService.scheduleWithFixedDelay(new Runnable() {
+			private BufferedInputStream bis;
+
+			@Override
+			public void run() {
+				if (isConnected()) {
+					try {
+						if (bis == null) {
+							bis = new BufferedInputStream(socket.getInputStream());
+						}
+
+						blocked = true;
+
+						// ”一次性“从输入流中读完
+						int available = bis.available();
+						if (available != 0) {
+							byte[] buffer = new byte[available];
+							int bytesRead = bis.read(buffer);
+							// 不能使用 != -1 来判断是否读到完，因为 socket 的输入流只有 socket 断开时才会返回 -1
+							if (bytesRead > 0) {
+								transportData(buffer);
+							}
+						}
+
+						blocked = false;
+					} catch (IOException e) {
+						transportError(e);
+					}
+				}
+			}
+		}, 0, 10, TimeUnit.MILLISECONDS);
 	}
 
 	private void transportData(byte[] respData) {
@@ -156,14 +164,11 @@ public class SocketClient {
 	}
 
 	private void transportDisconnected() {
-		// 关闭任务执行器
-		executorService.shutdownNow();
-
-		// 取消计时器
-		timer.cancel();
-
 		// 角标更新为 false
 		connected = false;
+
+		// 关闭任务执行器
+		scheduledExecutorService.shutdownNow();
 
 		// 通知回调
 		onCall.onDisconnect();
@@ -181,7 +186,6 @@ public class SocketClient {
 
 	private void transportError(Exception error) {
 		onCall.onError(new SocketIOException(error));
-		transportDisconnected();
 	}
 
 }
