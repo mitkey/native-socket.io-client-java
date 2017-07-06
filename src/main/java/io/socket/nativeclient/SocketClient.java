@@ -151,7 +151,7 @@ public class SocketClient {
 						}
 
 						blocked = false;
-					} catch (IOException e) {
+					} catch (Exception e) {
 						transportError(e);
 					}
 				}
